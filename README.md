@@ -17,26 +17,18 @@ The plugin owns only the part of a GraphQL schema that mirrors the database: sca
 
 | Component | Supported |
 |---|---|
-| JDK | 21 or later (jOOQ 3.21 requires it) |
+| JDK | Gradle must run on JDK 21 or later, because jOOQ 3.21 requires it. The plugin is compiled for Java 21. |
 | Gradle | 8.14 and 9.x; the functional test runs 8.14.3 and 9.4.0 with JDK 21 and 25 |
 | Database | PostgreSQL is tested. Other dialects are detected through jOOQ meta but not tested. |
 | Build script | Kotlin DSL. The nested blocks are Kotlin lambdas. |
 
 ## Installation
 
-The plugin is not published to a repository. Include the build from a clone or a Git submodule in `settings.gradle.kts`:
-
-```kotlin
-pluginManagement {
-    includeBuild("../GRAPHQL-SCHEMA-GENERATOR")
-}
-```
-
-Then apply it and add your JDBC driver to the `graphqlSchema` configuration in `build.gradle.kts`:
+The plugin is published to the [Gradle Plugin Portal](https://plugins.gradle.org/plugin/org.tinywind.graphql-schema-generator). Apply it and add your JDBC driver to the `graphqlSchema` configuration in `build.gradle.kts`:
 
 ```kotlin
 plugins {
-    id("org.tinywind.graphql-schema-generator")
+    id("org.tinywind.graphql-schema-generator") version "0.1.0"
 }
 
 repositories {
@@ -206,7 +198,7 @@ extend type Board {
 ./gradlew build
 ```
 
-The unit tests need nothing. The PostgreSQL tests start a `postgres:18-alpine` container through Testcontainers and are skipped when Docker is not reachable. The functional test runs consumer builds with Gradle 8.14.3 and 9.4.0 on the JDK 21 and 25 installations found under `~/.sdkman/candidates/java` and is skipped when none is installed. `jacocoTestCoverageVerification` requires 80% instruction coverage.
+`gradle/gradle-daemon-jvm.properties` makes the wrapper run this build on JDK 21; regenerate it with `./gradlew updateDaemonJvm --jvm-version=21` after changing the requirement. The unit tests need nothing. The PostgreSQL tests start a `postgres:18-alpine` container through Testcontainers and are skipped when Docker is not reachable. The functional test runs consumer builds with Gradle 8.14.3 and 9.4.0 on the JDK 21 and 25 installations found under `~/.sdkman/candidates/java` and is skipped when none is installed. `jacocoTestCoverageVerification` requires 80% instruction coverage. `./gradlew publishPlugins` publishes a release to the Gradle Plugin Portal with the `gradle.publish.key` and `gradle.publish.secret` properties of the publishing account.
 
 ## License
 
