@@ -1,0 +1,152 @@
+package org.tinywind.graphqlschemagenerator
+
+/** Applies the generator rules to a schema model and produces the declarations to render. */
+class SdlModelBuilder(private val generator: Generator) {
+
+    fun build(schema: SchemaModel): SdlDocument {
+        val tables = selectTables(schema)
+        val enumTypeNames = schema.enums.associate { it.name to typeName(it.name) }
+        val columnRules = ColumnRuleSet(generator)
+        val typeMapper = TypeMapper(generator.types.sqlTypes)
+        val referencedEnums = linkedSetOf<String>()
+        val types = tables.map { buildType(it, columnRules, typeMapper, enumTypeNames, referencedEnums) }
+        columnRules.assertEveryPatternMatched()
+        val enums = selectEnums(schema, referencedEnums)
+        assertUniqueNames(enums.map { it.name to "enum" } + types.map { it.name to "table" })
+        return SdlDocument(header(schema), enums.sortedBy { it.name }, types.sortedBy { it.name })
+    }
+
+    private fun selectTables(schema: SchemaModel): List<TableModel> {
+        if (generator.tables.includes.isEmpty()) {
+            throw GenerationException(
+                "generator.tables.include(...) names no table; list the tables to expose, or include(\".*\") for every table",
+            )
+        }
+        val includes = rules("generator.tables.include", generator.tables.includes)
+        val excludes = rules("generator.tables.exclude", generator.tables.excludes)
+        val selected = schema.tables.filter { table ->
+            val included = includes.anyMatches(table.name)
+            val excluded = excludes.anyMatches(table.name)
+            included && !excluded
+        }
+        (includes + excludes).assertMatched()
+        if (selected.isEmpty()) throw GenerationException("generator.tables selects no table of schema '${schema.schemaName}'")
+        return selected
+    }
+
+    private fun buildType(
+        table: TableModel,
+        rules: ColumnRuleSet,
+        typeMapper: TypeMapper,
+        enumTypeNames: Map<String, String>,
+        referencedEnums: MutableSet<String>,
+    ): SdlType {
+        val name = typeName(table.name)
+        validateTypeName(name, "Table ${table.name}")
+        val fields = table.columns.mapNotNull { column ->
+            val qualified = "${table.name}.${column.name}"
+            val override = rules.typeOverride(qualified)
+            val nonNull = rules.nonNull(qualified, column)
+            if (!rules.keeps(qualified, column)) return@mapNotNull null
+            val type = override ?: typeMapper.map(column, enumTypeNames)?.also { it.enumName?.let(referencedEnums::add) }?.expression
+                ?: throw GenerationException(
+                    "Column $qualified has the SQL type '${column.sqlType}' with no GraphQL mapping; add generator.types.map(\"${column.sqlType}\", \"...\"), " +
+                        "generator.types.override(\"$qualified\", \"...\") or generator.columns.exclude(\"$qualified\")",
+                )
+            val fieldName = fieldName(column.name)
+            validateFieldName(fieldName, "Column $qualified")
+            SdlField(fieldName, type, nonNull, column.comment.takeIf { generator.descriptions })
+        }
+        if (fields.isEmpty()) {
+            throw GenerationException("Table ${table.name} keeps no column after the column rules; include a column or exclude the table")
+        }
+        fields.groupBy { it.name }.filterValues { it.size > 1 }.keys.firstOrNull()?.let {
+            throw GenerationException("Table ${table.name} has two columns that both map to the field '$it'; exclude one of them")
+        }
+        return SdlType(name, fields, table.comment.takeIf { generator.descriptions })
+    }
+
+    private fun selectEnums(schema: SchemaModel, referenced: Set<String>): List<SdlEnum> {
+        val includes = rules("generator.enums.include", generator.enums.includes)
+        val selected = schema.enums.filter { enum ->
+            val forced = includes.anyMatches(enum.name)
+            generator.enums.includeUnreferenced || forced || enum.name in referenced
+        }
+        includes.assertMatched()
+        return selected.map { enum ->
+            val name = typeName(enum.name)
+            validateTypeName(name, "Enum ${enum.name}")
+            if (enum.literals.isEmpty()) throw GenerationException("Enum ${enum.name} has no value")
+            enum.literals.forEach { validateEnumValue(it, "Enum ${enum.name}") }
+            SdlEnum(name, enum.literals, enum.comment.takeIf { generator.descriptions })
+        }
+    }
+
+    private fun assertUniqueNames(names: List<Pair<String, String>>) {
+        names.groupBy { it.first }.filterValues { it.size > 1 }.entries.firstOrNull()?.let { (name, owners) ->
+            throw GenerationException("The GraphQL name '$name' is produced by more than one object (${owners.joinToString { it.second }}); exclude one of them")
+        }
+    }
+
+    private fun header(schema: SchemaModel): String? {
+        val header = generator.header ?: "# Generated by GRAPHQL-SCHEMA-GENERATOR from database schema \"${schema.schemaName}\". Do not edit."
+        return header.takeIf { it.isNotBlank() }
+    }
+}
+
+/** A configured pattern that remembers whether it ever matched, so stale configuration fails generation. */
+internal class Rule(val setting: String, val pattern: String) {
+    private val regex: Regex = try {
+        Regex(pattern, RegexOption.IGNORE_CASE)
+    } catch (e: IllegalArgumentException) {
+        throw GenerationException("$setting pattern '$pattern' is not a valid regular expression: ${e.message}")
+    }
+
+    var matched: Boolean = false
+        private set
+
+    fun matches(name: String): Boolean = regex.matches(name).also { if (it) matched = true }
+}
+
+internal fun rules(setting: String, patterns: List<String>): List<Rule> = patterns.map { Rule(setting, it) }
+
+/** Evaluates every rule so each one records its use. */
+internal fun List<Rule>.anyMatches(name: String): Boolean = map { it.matches(name) }.any { it }
+
+internal fun List<Rule>.assertMatched() = forEach {
+    if (!it.matched) throw GenerationException("${it.setting} pattern '${it.pattern}' matches nothing in the selected schema; remove it or fix the name")
+}
+
+internal class ColumnRuleSet(private val generator: Generator) {
+    private val includes = rules("generator.columns.include", generator.columns.includes)
+    private val excludes = rules("generator.columns.exclude", generator.columns.excludes)
+    private val overrides = generator.types.columnTypes.map { (pattern, type) -> Rule("generator.types.override", pattern) to type }
+    private val nullable = rules("generator.types.nullable", generator.types.nullable)
+    private val nonNull = rules("generator.types.nonNull", generator.types.nonNull)
+
+    fun keeps(qualified: String, column: ColumnModel): Boolean {
+        val excluded = excludes.anyMatches(qualified)
+        val included = includes.anyMatches(qualified)
+        return when {
+            excluded -> false
+            included -> true
+            column.isForeignKey && generator.columns.excludeForeignKeys -> column.isPrimaryKey && generator.columns.keepPrimaryKeys
+            else -> true
+        }
+    }
+
+    fun typeOverride(qualified: String): String? = overrides.filter { (rule, _) -> rule.matches(qualified) }.firstOrNull()?.second
+
+    fun nonNull(qualified: String, column: ColumnModel): Boolean {
+        val nullable = nullable.anyMatches(qualified)
+        val nonNull = nonNull.anyMatches(qualified)
+        return when {
+            nullable && nonNull -> throw GenerationException("Column $qualified matches both generator.types.nullable and generator.types.nonNull")
+            nullable -> false
+            nonNull -> true
+            else -> !column.isNullable
+        }
+    }
+
+    fun assertEveryPatternMatched() = (includes + excludes + overrides.map { it.first } + nullable + nonNull).assertMatched()
+}
