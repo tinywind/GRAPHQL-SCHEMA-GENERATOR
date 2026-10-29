@@ -1,9 +1,9 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    kotlin("jvm") version "2.4.10"
+    kotlin("jvm") version "2.4.21"
     `java-gradle-plugin`
-    id("com.gradle.plugin-publish") version "2.0.0"
+    id("com.gradle.plugin-publish") version "2.2.1"
     jacoco
 }
 
@@ -20,14 +20,14 @@ repositories {
     mavenCentral()
 }
 
-val postgresqlDriverVersion = "42.7.13"
+val postgresqlDriverVersion = "42.7.14"
 
 dependencies {
     implementation(gradleApi())
-    implementation("org.jooq:jooq-meta:3.21.8")
+    implementation("org.jooq:jooq-meta:3.21.9")
 
     testImplementation(gradleTestKit())
-    testImplementation(platform("org.junit:junit-bom:6.0.3"))
+    testImplementation(platform("org.junit:junit-bom:6.1.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("org.testcontainers:testcontainers-postgresql:2.0.5")
