@@ -28,7 +28,7 @@ The plugin is published to the [Gradle Plugin Portal](https://plugins.gradle.org
 
 ```kotlin
 plugins {
-    id("org.tinywind.graphql-schema-generator") version "0.1.0"
+    id("org.tinywind.graphql-schema-generator") version "0.1.1"
 }
 
 repositories {
@@ -36,7 +36,7 @@ repositories {
 }
 
 dependencies {
-    graphqlSchema("org.postgresql:postgresql:42.7.13")
+    graphqlSchema("org.postgresql:postgresql:42.7.14")
 }
 ```
 

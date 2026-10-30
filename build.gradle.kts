@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "org.tinywind"
-version = "0.1.0"
+version = "0.1.1"
 
 // jOOQ 3.21 needs Java 21, so Gradle itself must run on JDK 21 or later. gradle/gradle-daemon-jvm.properties selects
 // such a daemon for this build; a consumer only needs its own Gradle to run on JDK 21 or later.
