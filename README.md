@@ -1,6 +1,6 @@
 # GRAPHQL-SCHEMA-GENERATOR
 
-GRAPHQL-SCHEMA-GENERATOR is a Gradle plugin that generates GraphQL SDL object types and enums from a database schema. It reads the schema through [jOOQ meta](https://www.jooq.org/), the metadata layer behind jOOQ's own code generator, so the generated type and field names are the names jOOQ gives its generated POJOs and properties. A resolver that returns a jOOQ POJO therefore matches the generated GraphQL type by construction.
+Generate GraphQL SDL object types and enums from a database schema with Gradle. The plugin reads the schema through [jOOQ meta](https://www.jooq.org/), the metadata layer behind jOOQ's own code generator, so the generated type and field names are the names jOOQ gives its generated POJOs and properties. A resolver that returns a jOOQ POJO therefore matches the generated GraphQL type by construction.
 
 The plugin owns only the part of a GraphQL schema that mirrors the database: scalar columns and enum values. Relations, computed fields, inputs and root fields stay hand-written, typically as `extend type` declarations next to the generated file.
 
@@ -69,7 +69,7 @@ graphqlSchema {
         }
         types {
             map("jsonb", "String")
-            override("audit_log.changes", "String")
+            override("feed.post_id", "ID")
             nullable("post.title")
         }
         enums {
