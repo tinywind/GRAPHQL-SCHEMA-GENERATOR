@@ -24,7 +24,7 @@ val postgresqlDriverVersion = "42.7.14"
 
 dependencies {
     implementation(gradleApi())
-    implementation("org.jooq:jooq-meta:3.21.9")
+    implementation("org.jooq:jooq-meta:3.21.10")
 
     testImplementation(gradleTestKit())
     testImplementation(platform("org.junit:junit-bom:6.1.3"))
